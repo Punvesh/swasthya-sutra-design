@@ -19,6 +19,9 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { geminiService } from "@/services/geminiService";
 import GeminiApiKeyModal from "./GeminiApiKeyModal";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { Link } from "react-router-dom";
 
 interface FormData {
   name: string;
@@ -32,6 +35,7 @@ interface FormData {
 
 const UserForm: React.FC = () => {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [formData, setFormData] = useState<FormData>({
     name: "",
     age: "",
@@ -51,6 +55,42 @@ const UserForm: React.FC = () => {
     }
   }, []);
 
+  // Load user profile data if available
+  useEffect(() => {
+    const loadUserProfile = async () => {
+      if (user) {
+        try {
+          const { data, error } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', user.id)
+            .single();
+          
+          if (error) {
+            console.error("Error fetching user profile:", error);
+            return;
+          }
+          
+          if (data) {
+            setFormData({
+              name: data.name || "",
+              age: data.age ? data.age.toString() : "",
+              gender: data.gender || "",
+              weight: data.weight ? data.weight.toString() : "",
+              height: data.height ? data.height.toString() : "",
+              activityLevel: data.activity_level || "",
+              dietPreference: data.diet_preference || "",
+            });
+          }
+        } catch (error) {
+          console.error("Failed to load user profile:", error);
+        }
+      }
+    };
+    
+    loadUserProfile();
+  }, [user]);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
@@ -58,6 +98,61 @@ const UserForm: React.FC = () => {
 
   const handleSelectChange = (value: string, name: keyof FormData) => {
     setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const saveToProfile = async () => {
+    if (!user) return;
+    
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          name: formData.name,
+          age: formData.age ? parseInt(formData.age) : null,
+          gender: formData.gender,
+          weight: formData.weight ? parseFloat(formData.weight) : null,
+          height: formData.height ? parseFloat(formData.height) : null,
+          activity_level: formData.activityLevel,
+          diet_preference: formData.dietPreference
+        })
+        .eq('id', user.id);
+      
+      if (error) throw error;
+    } catch (error: any) {
+      console.error("Error saving profile:", error);
+      toast({
+        title: "Error saving profile",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+  
+  const saveMealPlan = async (mealData: any) => {
+    if (!user) return;
+    
+    try {
+      const { error } = await supabase
+        .from('meal_plans')
+        .insert({
+          user_id: user.id,
+          meals: mealData
+        });
+      
+      if (error) throw error;
+      
+      toast({
+        title: "Meal plan saved",
+        description: "Your meal plan has been saved to your account.",
+      });
+    } catch (error: any) {
+      console.error("Error saving meal plan:", error);
+      toast({
+        title: "Error saving meal plan",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -68,9 +163,21 @@ const UserForm: React.FC = () => {
       return;
     }
     
+    // If user is not logged in, prompt them to sign in
+    if (!user) {
+      toast({
+        title: "Sign in required",
+        description: "Please sign in to generate and save your diet plan.",
+      });
+      return;
+    }
+    
     setIsLoading(true);
     
     try {
+      // Save user profile data first
+      await saveToProfile();
+      
       toast({
         title: "Generating diet plan",
         description: "Your personalized Indian diet plan is being created...",
@@ -84,8 +191,10 @@ const UserForm: React.FC = () => {
           description: "Your personalized Indian diet plan has been generated.",
         });
         
+        // Save the meal plan to the database
+        await saveMealPlan(result.data.meals);
+        
         // Store the generated meal plan in localStorage for now
-        // In a real app, this would go to a database via backend
         localStorage.setItem('generatedDietPlan', JSON.stringify(result.data.meals));
         
         // Dispatch a custom event to notify other components
@@ -125,6 +234,12 @@ const UserForm: React.FC = () => {
           <CardDescription className="text-center">
             Enter your details to generate a personalized diet plan
           </CardDescription>
+          {!user && (
+            <div className="text-center mt-2 text-sm text-orange-600">
+              <p>Sign in to save your profile and meal plans.</p>
+              <Link to="/auth" className="underline hover:text-orange-700">Sign in or create an account</Link>
+            </div>
+          )}
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">

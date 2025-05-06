@@ -5,7 +5,11 @@ import MealCard from "./MealCard";
 import { geminiService } from "@/services/geminiService";
 import { Button } from "@/components/ui/button";
 import GeminiApiKeyModal from "./GeminiApiKeyModal";
-import { Cog } from "lucide-react";
+import { Cog, Save } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import { Link } from "react-router-dom";
 
 const daysOfWeek = [
   "Sunday",
@@ -38,12 +42,54 @@ interface DietPlan {
   [day: string]: DayMeals;
 }
 
+interface MealPlan {
+  id: string;
+  user_id: string;
+  meals: DietPlan;
+  created_at: string;
+}
+
 const DietPlanSection: React.FC = () => {
+  const { user } = useAuth();
+  const { toast } = useToast();
   const [dietPlan, setDietPlan] = useState<DietPlan | null>(null);
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
   const [activeDay, setActiveDay] = useState("Monday");
+  const [savedMealPlans, setSavedMealPlans] = useState<MealPlan[]>([]);
+  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
 
-  // Listen for diet plan changes in localStorage
+  // Load user's meal plans
+  useEffect(() => {
+    const fetchSavedMealPlans = async () => {
+      if (!user) return;
+      
+      try {
+        const { data, error } = await supabase
+          .from('meal_plans')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false });
+        
+        if (error) throw error;
+        
+        if (data && data.length > 0) {
+          setSavedMealPlans(data);
+          
+          // Load the most recent meal plan if none is selected
+          if (!dietPlan && !selectedPlanId) {
+            setSelectedPlanId(data[0].id);
+            setDietPlan(data[0].meals);
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching meal plans:", error);
+      }
+    };
+    
+    fetchSavedMealPlans();
+  }, [user, dietPlan]);
+
+  // Listen for diet plan changes in localStorage (for newly generated plans)
   useEffect(() => {
     const handleStorageChange = () => {
       const storedDietPlan = localStorage.getItem('generatedDietPlan');
@@ -51,6 +97,7 @@ const DietPlanSection: React.FC = () => {
         try {
           const parsedPlan = JSON.parse(storedDietPlan);
           setDietPlan(parsedPlan);
+          setSelectedPlanId(null); // Clear selected saved plan
           
           // Set active day to the first available day in the plan
           const firstAvailableDay = Object.keys(parsedPlan)[0];
@@ -78,24 +125,20 @@ const DietPlanSection: React.FC = () => {
     };
   }, []);
 
-  // Load diet plan from localStorage on component mount
-  useEffect(() => {
-    const storedDietPlan = localStorage.getItem('generatedDietPlan');
-    if (storedDietPlan) {
-      try {
-        const parsedPlan = JSON.parse(storedDietPlan);
-        setDietPlan(parsedPlan);
-        
-        // Set active day to the first available day in the plan
-        const firstAvailableDay = Object.keys(parsedPlan)[0];
-        if (firstAvailableDay) {
-          setActiveDay(firstAvailableDay);
-        }
-      } catch (error) {
-        console.error("Error parsing stored diet plan:", error);
+  // Handle selecting a saved meal plan
+  const handleSelectMealPlan = (planId: string) => {
+    const selectedPlan = savedMealPlans.find(plan => plan.id === planId);
+    if (selectedPlan) {
+      setDietPlan(selectedPlan.meals);
+      setSelectedPlanId(planId);
+      
+      // Set active day to the first available day in the plan
+      const firstAvailableDay = Object.keys(selectedPlan.meals)[0];
+      if (firstAvailableDay) {
+        setActiveDay(firstAvailableDay);
       }
     }
-  }, []);
+  };
 
   return (
     <section id="diet-plan-section" className="py-16">
@@ -119,6 +162,31 @@ const DietPlanSection: React.FC = () => {
             </Button>
           </div>
         </div>
+
+        {!user ? (
+          <div className="text-center py-6 bg-sage-50 rounded-lg mb-8">
+            <p className="mb-2">Sign in to save and access your meal plans</p>
+            <Button asChild>
+              <Link to="/auth">Sign In or Create Account</Link>
+            </Button>
+          </div>
+        ) : savedMealPlans.length > 0 && (
+          <div className="mb-8">
+            <h3 className="text-lg font-semibold mb-2">Your Saved Meal Plans</h3>
+            <div className="flex flex-wrap gap-2">
+              {savedMealPlans.map((plan) => (
+                <Button 
+                  key={plan.id}
+                  variant={selectedPlanId === plan.id ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => handleSelectMealPlan(plan.id)}
+                >
+                  {new Date(plan.created_at).toLocaleDateString()}
+                </Button>
+              ))}
+            </div>
+          </div>
+        )}
 
         <Tabs value={activeDay} onValueChange={setActiveDay} className="w-full">
           <div className="mb-8 overflow-x-auto">
