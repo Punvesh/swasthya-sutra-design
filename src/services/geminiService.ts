@@ -6,15 +6,41 @@ export interface FoodGenerationResponse {
   success: boolean;
   data?: {
     meals: {
-      [mealType: string]: {
-        dishName: string;
-        calories: number;
-        protein: number;
-        carbs: number;
-        fat: number;
-        ingredients: string[];
-      }
-    }[];
+      [day: string]: {
+        breakfast: {
+          dishName: string;
+          calories: number;
+          protein: number;
+          carbs: number;
+          fat: number;
+          ingredients: string[];
+        };
+        lunch: {
+          dishName: string;
+          calories: number;
+          protein: number;
+          carbs: number;
+          fat: number;
+          ingredients: string[];
+        };
+        dinner: {
+          dishName: string;
+          calories: number;
+          protein: number;
+          carbs: number;
+          fat: number;
+          ingredients: string[];
+        };
+        snack: {
+          dishName: string;
+          calories: number;
+          protein: number;
+          carbs: number;
+          fat: number;
+          ingredients: string[];
+        };
+      };
+    };
   };
   error?: string;
 }
@@ -137,22 +163,38 @@ export const geminiService = {
         return { success: false, error: "No response from Gemini API" };
       }
 
-      // Find the JSON part within the response (in case there's any explanation text)
+      // Extract JSON from the response (it might be wrapped in markdown code blocks)
       let jsonStr = textResponse;
-      const jsonMatch = textResponse.match(/({[\s\S]*})/);
-      if (jsonMatch && jsonMatch[0]) {
-        jsonStr = jsonMatch[0];
+      // If response has markdown code blocks like ```json { ... } ```
+      const jsonMatch = textResponse.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+      if (jsonMatch && jsonMatch[1]) {
+        jsonStr = jsonMatch[1];
+      } else {
+        // Alternative: just find a JSON object
+        const altMatch = textResponse.match(/(\{[\s\S]*\})/);
+        if (altMatch && altMatch[1]) {
+          jsonStr = altMatch[1];
+        }
       }
 
       // Parse the JSON
-      const dietPlan = JSON.parse(jsonStr);
-
-      return {
-        success: true,
-        data: {
-          meals: dietPlan
-        }
-      };
+      try {
+        const dietPlan = JSON.parse(jsonStr.trim());
+        
+        return {
+          success: true,
+          data: {
+            meals: dietPlan
+          }
+        };
+      } catch (parseError) {
+        console.error("Error parsing JSON from API response:", parseError);
+        console.log("Raw response:", textResponse);
+        return {
+          success: false,
+          error: "Failed to parse the diet plan. Please try again."
+        };
+      }
     } catch (error) {
       console.error("Error generating food plan:", error);
       return { 

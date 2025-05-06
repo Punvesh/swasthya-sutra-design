@@ -43,6 +43,41 @@ const DietPlanSection: React.FC = () => {
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
   const [activeDay, setActiveDay] = useState("Monday");
 
+  // Listen for diet plan changes in localStorage
+  useEffect(() => {
+    const handleStorageChange = () => {
+      const storedDietPlan = localStorage.getItem('generatedDietPlan');
+      if (storedDietPlan) {
+        try {
+          const parsedPlan = JSON.parse(storedDietPlan);
+          setDietPlan(parsedPlan);
+          
+          // Set active day to the first available day in the plan
+          const firstAvailableDay = Object.keys(parsedPlan)[0];
+          if (firstAvailableDay) {
+            setActiveDay(firstAvailableDay);
+          }
+        } catch (error) {
+          console.error("Error parsing stored diet plan:", error);
+        }
+      }
+    };
+
+    // Call once on mount
+    handleStorageChange();
+    
+    // Add listener for changes
+    window.addEventListener('storage', handleStorageChange);
+    
+    // Custom event listener for local updates (without page refresh)
+    window.addEventListener('dietPlanGenerated', handleStorageChange);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('dietPlanGenerated', handleStorageChange);
+    };
+  }, []);
+
   // Load diet plan from localStorage on component mount
   useEffect(() => {
     const storedDietPlan = localStorage.getItem('generatedDietPlan');

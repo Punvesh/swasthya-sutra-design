@@ -88,6 +88,9 @@ const UserForm: React.FC = () => {
         // In a real app, this would go to a database via backend
         localStorage.setItem('generatedDietPlan', JSON.stringify(result.data.meals));
         
+        // Dispatch a custom event to notify other components
+        window.dispatchEvent(new Event('dietPlanGenerated'));
+        
         // Scroll to the diet plan section
         const dietPlanSection = document.getElementById('diet-plan-section');
         if (dietPlanSection) {

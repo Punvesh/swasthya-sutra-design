@@ -51,7 +51,10 @@ const GeminiApiKeyModal: React.FC<GeminiApiKeyModalProps> = ({
       title: "API Key Saved",
       description: "Your Gemini API key has been saved successfully",
     });
+    
+    // Call the callback to notify parent components that the API key has been saved
     onApiKeySave();
+    
     onClose();
   };
 
