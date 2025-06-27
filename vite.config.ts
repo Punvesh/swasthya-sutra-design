@@ -15,6 +15,10 @@ export default defineConfig(({ mode }) => ({
     },
   },
   build: {
-    outDir: 'dist', // Explicitly set output directory
+    outDir: 'dist', // Make sure dist is your publish directory
   },
+  server: {
+    host: '0.0.0.0', // Required for Render
+    port: 8080        // Optional, but usually set for consistency
+  }
 }));
